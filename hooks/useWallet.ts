@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
+import { toast } from 'sonner';
 
 declare global {
   interface Window {
@@ -26,6 +28,20 @@ export const useWallet = () => {
   const [network, setNetwork] = useState<NetworkInfo | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
+  const saveWalletToDatabase = async (address: string, signature: string, message: string) => {
+    try {
+      await fetch('/api/wallet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address, signature, message }),
+      });
+    } catch (err) {
+      console.error('Failed to save wallet to database:', err);
+    }
+  };
+
   const getNetworkInfo = async (chainId: string): Promise<NetworkInfo> => {
     const networks: { [key: string]: string } = {
       '1': 'Ethereum Mainnet',
@@ -43,13 +59,10 @@ export const useWallet = () => {
   const updateBalance = async (address: string) => {
     if (!window.ethereum) return;
     try {
-      const balance = await window.ethereum.request({
-        method: 'eth_getBalance',
-        params: [address, 'latest'],
-      });
-      // Convert from wei to ETH
-      const ethBalance = (parseInt(balance, 16) / 1e18).toFixed(4);
-      setBalance(ethBalance);
+      const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+      const balance = await provider.getBalance(address);
+      const ethBalance = ethers.utils.formatEther(balance);
+      setBalance(parseFloat(ethBalance).toFixed(4));
     } catch (err) {
       console.error('Error fetching balance:', err);
     }
@@ -58,8 +71,9 @@ export const useWallet = () => {
   const updateNetwork = async () => {
     if (!window.ethereum) return;
     try {
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      const networkInfo = await getNetworkInfo(chainId);
+      const provider = new ethers.providers.Web3Provider(window.ethereum as any, 'any');
+      const network = await provider.getNetwork();
+      const networkInfo = await getNetworkInfo(network.chainId.toString());
       setNetwork(networkInfo);
     } catch (err) {
       console.error('Error fetching network:', err);
@@ -74,11 +88,13 @@ export const useWallet = () => {
     const checkConnection = async () => {
       if (window.ethereum) {
         try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          const provider = new ethers.providers.Web3Provider(window.ethereum as any, 'any');
+          const accounts = await provider.listAccounts();
           if (accounts.length > 0) {
             setAccount(accounts[0]);
             updateBalance(accounts[0]);
             updateNetwork();
+            // Note: We don't save to database on auto-reconnect because it requires signing a message
           }
         } catch (err) {
           console.error('Error checking connection:', err);
@@ -122,6 +138,7 @@ export const useWallet = () => {
 
   const connectWallet = async () => {
     if (!window.ethereum) {
+      toast.error('MetaMask is not installed. Please install it to connect your wallet.');
       setError('MetaMask is not installed');
       return;
     }
@@ -130,15 +147,22 @@ export const useWallet = () => {
     setError(null);
 
     try {
-      const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      });
-      setAccount(accounts[0]);
-      updateBalance(accounts[0]);
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const provider = new ethers.providers.Web3Provider(window.ethereum as any, 'any');
+      const signer = provider.getSigner();
+      const address = await signer.getAddress();
+      
+      const message = `Sign this message to authenticate your wallet connection to TheTaskope.\n\nAddress: ${address}\nNonce: ${Date.now()}`;
+      const signature = await signer.signMessage(message);
+      
+      setAccount(address);
+      updateBalance(address);
       updateNetwork();
+      saveWalletToDatabase(address, signature, message);
       setIsOpen(true);
-    } catch (err) {
-      setError('Failed to connect wallet');
+    } catch (err: any) {
+      setError('Failed to connect or authenticate wallet');
+      toast.error('Failed to connect or authenticate wallet: ' + (err?.message || 'Unknown error'));
       console.error('Error connecting wallet:', err);
     } finally {
       setIsConnecting(false);

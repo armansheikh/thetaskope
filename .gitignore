@@ -34,6 +34,7 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+server/config/config.env
 
 # Vercel
 .vercel

@@ -24,7 +24,8 @@
     "bcryptjs": "^2.4.3",
     "paytmchecksum": "^1.5.0",
     "validator": "^13.11.0",
-    "stripe": "^13.10.0"
+    "stripe": "^13.10.0",
+    "ethers": "^5.7.2"
   },
   "devDependencies": {}
 }
