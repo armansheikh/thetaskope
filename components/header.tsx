@@ -13,8 +13,10 @@ import {
   WalletIcon,
   LogOutIcon,
   GithubIcon,
-  TwitterIcon
+  TwitterIcon,
+  CopyIcon
 } from "lucide-react"
+import { toast } from "sonner"
 import { Input } from "./ui/input"
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -172,6 +174,16 @@ export function Header() {
                       : "Connect Wallet"
                   }
                 </span>
+                {account && !isConnecting && (
+                  <CopyIcon 
+                    className="h-4 w-4 ml-1 hover:text-primary transition-colors cursor-pointer" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(account);
+                      toast.success("Address copied to clipboard");
+                    }} 
+                  />
+                )}
               </Button>
               {isOpen && <WalletPopup />}
             </div>
